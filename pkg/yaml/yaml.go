@@ -16,7 +16,12 @@ package yaml
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
+	"io/ioutil"
+	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Decoder reads chunks of objects and returns ErrShortBuffer if
@@ -78,6 +83,48 @@ func (d *Decoder) Read(data []byte) (n int, err error) {
 // Close closes the decoder
 func (d *Decoder) Close() error {
 	return d.r.Close()
+}
+
+func SplitYAML(yamlContents string) ([]string, error) {
+	yamlDecoder, ok := NewDocumentDecoder(ioutil.NopCloser(bytes.NewReader([]byte(yamlContents)))).(*Decoder)
+	if !ok {
+		err := fmt.Errorf("unable to create a yaml decoder")
+		logrus.Error(err)
+		return nil, err
+	}
+	defer func() {
+		if err := yamlDecoder.Close(); err != nil {
+			logrus.Error(err)
+		}
+	}()
+	var err error
+	n := 0
+	data := [][]byte{}
+	ind := 0
+	for err == io.ErrShortBuffer || err == nil {
+		// for {
+		d := make([]byte, 1000)
+		n, err = yamlDecoder.Read(d)
+		// logrus.Debugf("Read this: %s, count: %d, err: %v", d, n, err)
+		if len(data) == 0 || len(data) <= ind {
+			data = append(data, []byte{})
+		}
+		if n > 0 {
+			data[ind] = append(data[ind], d...)
+		}
+		if err == nil {
+			logrus.Debugf("..............BOUNDARY................")
+			ind++
+		}
+	}
+	result := make([]string, len(data))
+	for i, row := range data {
+		r := string(row)
+		r = strings.Trim(r, "\x00")
+		logrus.Debugf("ind: %d, data: %s", i, r)
+		result[i] = r
+	}
+	return result, nil
 }
 
 const yamlSeparator = "\n---"
