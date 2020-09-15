@@ -19,10 +19,10 @@ import (
 	"io"
 )
 
-// YAMLDecoder reads chunks of objects and returns ErrShortBuffer if
+// Decoder reads chunks of objects and returns ErrShortBuffer if
 // the data is not sufficient.
 // borrowed from APIMachinery
-type YAMLDecoder struct {
+type Decoder struct {
 	r         io.ReadCloser
 	scanner   *bufio.Scanner
 	remaining []byte
@@ -38,7 +38,7 @@ func NewDocumentDecoder(r io.ReadCloser) io.ReadCloser {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(b, 256*1024) // overriding: the size of the buffer used was small when loading large sections from istio deployment yaml
 	scanner.Split(splitYAMLDocument)
-	return &YAMLDecoder{
+	return &Decoder{
 		r:       r,
 		scanner: scanner,
 	}
@@ -46,7 +46,7 @@ func NewDocumentDecoder(r io.ReadCloser) io.ReadCloser {
 
 // Read reads the previous slice into the buffer, or attempts to read
 // the next chunk.
-func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
+func (d *Decoder) Read(data []byte) (n int, err error) {
 	left := len(d.remaining)
 	if left == 0 {
 		// return the next chunk from the stream
@@ -76,7 +76,7 @@ func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 }
 
 // Close closes the decoder
-func (d *YAMLDecoder) Close() error {
+func (d *Decoder) Close() error {
 	return d.r.Close()
 }
 
