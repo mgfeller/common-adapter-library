@@ -11,7 +11,7 @@ type Operations map[string]*Operation
 
 // ListOperations lists the operations available
 func (h *BaseAdapter) ListOperations() (Operations, error) {
-	operations := make(Operations, 0)
+	operations := make(Operations)
 	err := h.Config.Operations(&operations)
 	if err != nil {
 		return nil, err

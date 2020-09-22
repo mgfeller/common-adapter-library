@@ -38,7 +38,6 @@ type BaseAdapter struct {
 
 // newClient creates a new client
 func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *chan interface{}) error {
-
 	h.Channel = ch
 	h.KubeConfigPath = h.Config.GetKey("kube-config-path")
 
@@ -79,7 +78,6 @@ func (h *BaseAdapter) clientConfig(kubeconfig []byte, contextName string) (*rest
 
 // writeKubeconfig creates kubeconfig in local container
 func writeKubeconfig(kubeconfig []byte, contextName string, path string) error {
-
 	yamlConfig := models.Kubeconfig{}
 	err := yaml.Unmarshal(kubeconfig, &yamlConfig)
 	if err != nil {
