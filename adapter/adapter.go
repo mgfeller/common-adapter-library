@@ -14,7 +14,6 @@ import (
 	"github.com/mgfeller/common-adapter-library/config"
 )
 
-// Handler provides the methods supported by the adapter
 type Handler interface {
 	GetName() string
 	CreateInstance([]byte, string, *chan interface{}) error
@@ -25,7 +24,6 @@ type Handler interface {
 	StreamInfo(*Event)
 }
 
-// BaseAdapter holds the dependencies for kuma-adapter
 type BaseAdapter struct {
 	Config  config.Handler
 	Log     logger.Handler
@@ -36,7 +34,6 @@ type BaseAdapter struct {
 	SmiChart       string
 }
 
-// newClient creates a new client
 func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *chan interface{}) error {
 	h.Channel = ch
 	h.KubeConfigPath = h.Config.GetKey("kube-config-path")
@@ -46,7 +43,6 @@ func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *
 		return ErrClientConfig(err)
 	}
 
-	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return ErrClientSet(err)
@@ -57,7 +53,6 @@ func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *
 	return nil
 }
 
-// configClient creates a Config client
 func (h *BaseAdapter) clientConfig(kubeconfig []byte, contextName string) (*rest.Config, error) {
 	if len(kubeconfig) > 0 {
 		ccfg, err := clientcmd.Load(kubeconfig)
@@ -76,7 +71,7 @@ func (h *BaseAdapter) clientConfig(kubeconfig []byte, contextName string) (*rest
 	return rest.InClusterConfig()
 }
 
-// writeKubeconfig creates kubeconfig in local container
+// writeKubeconfig creates kubeconfig in local container or file system
 func writeKubeconfig(kubeconfig []byte, contextName string, path string) error {
 	yamlConfig := models.Kubeconfig{}
 	err := yaml.Unmarshal(kubeconfig, &yamlConfig)
