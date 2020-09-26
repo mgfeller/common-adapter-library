@@ -9,6 +9,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/layer5io/gokit v0.1.12
+	github.com/spf13/viper v1.7.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc v0.11.0
 	go.opentelemetry.io/otel v0.11.0
 	go.opentelemetry.io/otel/exporters/trace/jaeger v0.11.0
