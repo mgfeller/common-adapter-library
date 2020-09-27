@@ -17,7 +17,7 @@ type Viper struct {
 	instance *viper.Viper
 }
 
-func NewViper(serverConfig map[string]string, meshConfig map[string]string, providerConfig map[string]string, operations adapter.Operations) (config.Handler, error) {
+func NewViper(serverConfig map[string]string, meshSpec map[string]string, meshInstance map[string]string, providerConfig map[string]string, operations adapter.Operations) (config.Handler, error) {
 	v := viper.New()
 	v.AddConfigPath(providerConfig["filepath"])
 	v.SetConfigType(providerConfig["filetype"])
@@ -28,8 +28,12 @@ func NewViper(serverConfig map[string]string, meshConfig map[string]string, prov
 		v.SetDefault(ServerKey+"."+key, value)
 	}
 
-	for key, value := range meshConfig {
+	for key, value := range meshSpec {
 		v.SetDefault(MeshSpecKey+"."+key, value)
+	}
+
+	for key, value := range meshInstance {
+		v.SetDefault(MeshInstanceKey+"."+key, value)
 	}
 
 	for key, value := range operations {
