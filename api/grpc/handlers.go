@@ -27,16 +27,25 @@ func (s *Service) MeshName(ctx context.Context, req *meshes.MeshNameRequest) (*m
 
 // ApplyOperation is the handler function for the method ApplyOperation.
 func (s *Service) ApplyOperation(ctx context.Context, req *meshes.ApplyRuleRequest) (*meshes.ApplyRuleResponse, error) {
+	// TODO: if err is nil then the response is correctly propagated to the client as JSON
+	// TODO: Consider whether this is the correct way to handle errors.
 	if req == nil {
-		return nil, ErrRequestInvalid
+		return &meshes.ApplyRuleResponse{
+			Error:       ErrRequestInvalid.Error(),
+			OperationId: "",
+		}, ErrRequestInvalid
 	}
 
 	err := s.Handler.ApplyOperation(ctx, req.OpName, req.OperationId, req.DeleteOp)
 	if err != nil {
-		return nil, err
+		return &meshes.ApplyRuleResponse{
+			Error:       err.Error(),
+			OperationId: req.OperationId,
+		}, err
 	}
 
 	return &meshes.ApplyRuleResponse{
+		Error:       "",
 		OperationId: req.OperationId,
 	}, nil
 }
