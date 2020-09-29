@@ -18,22 +18,22 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"strings"
+	"text/template"
+	"time"
+
 	"github.com/ghodss/yaml"
 	"github.com/layer5io/gokit/models"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"io"
-	"io/ioutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"path"
-	"strings"
-	"text/template"
-	"time"
 )
 
 func (h *BaseAdapter) k8sClientConfig(kubeconfig []byte, contextName string) (*rest.Config, error) {
@@ -322,6 +322,7 @@ func (h *BaseAdapter) splitYAML(yamlContents string) ([]string, error) {
 
 func (h *BaseAdapter) createNamespace(ctx context.Context, namespace string) error {
 	logrus.Debugf("creating namespace: %s", namespace)
+	// TODO: copy namespace.yaml to an appropriate location in this library.
 	yamlFileContents, err := h.executeTemplate(ctx, "", namespace, "namespace.yml")
 	if err != nil {
 		return err
@@ -332,8 +333,8 @@ func (h *BaseAdapter) createNamespace(ctx context.Context, namespace string) err
 	return nil
 }
 
-func (h *BaseAdapter) executeTemplate(ctx context.Context, username, namespace, templateName string) (string, error) {
-	tmpl, err := template.ParseFiles(path.Join("consul", "config_templates", templateName))
+func (h *BaseAdapter) executeTemplate(ctx context.Context, username, namespace, templatePath string) (string, error) {
+	tmpl, err := template.ParseFiles(templatePath)
 	if err != nil {
 		err = errors.Wrapf(err, "unable to parse template")
 		logrus.Error(err)
