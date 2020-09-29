@@ -1,16 +1,26 @@
+// Copyright 2020 Michael Gfeller
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package adapter
 
 import (
 	"context"
-	"io/ioutil"
+	"k8s.io/client-go/dynamic"
 
-	"gopkg.in/yaml.v2"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/layer5io/gokit/logger"
-	"github.com/layer5io/gokit/models"
 	"github.com/mgfeller/common-adapter-library/config"
 )
 
@@ -29,16 +39,17 @@ type BaseAdapter struct {
 	Log     logger.Handler
 	Channel *chan interface{}
 
-	KubeClient     *kubernetes.Clientset
-	KubeConfigPath string
-	SmiChart       string
+	KubeClient        *kubernetes.Clientset
+	DynamicKubeClient dynamic.Interface
+	KubeConfigPath    string
+	SmiChart          string
 }
 
 func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *chan interface{}) error {
 	h.Channel = ch
 	h.KubeConfigPath = h.Config.GetKey("kube-config-path")
 
-	config, err := h.clientConfig(kubeconfig, contextName)
+	config, err := h.k8sClientConfig(kubeconfig, contextName)
 	if err != nil {
 		return ErrClientConfig(err)
 	}
@@ -50,46 +61,11 @@ func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *
 
 	h.KubeClient = clientset
 
-	return nil
-}
-
-func (h *BaseAdapter) clientConfig(kubeconfig []byte, contextName string) (*rest.Config, error) {
-	if len(kubeconfig) > 0 {
-		ccfg, err := clientcmd.Load(kubeconfig)
-		if err != nil {
-			return nil, err
-		}
-		if contextName != "" {
-			ccfg.CurrentContext = contextName
-		}
-		err = writeKubeconfig(kubeconfig, contextName, h.KubeConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		return clientcmd.NewDefaultClientConfig(*ccfg, &clientcmd.ConfigOverrides{}).ClientConfig()
-	}
-	return rest.InClusterConfig()
-}
-
-// writeKubeconfig creates kubeconfig in local container or file system
-func writeKubeconfig(kubeconfig []byte, contextName string, path string) error {
-	yamlConfig := models.Kubeconfig{}
-	err := yaml.Unmarshal(kubeconfig, &yamlConfig)
+	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return err
 	}
-
-	yamlConfig.CurrentContext = contextName
-
-	d, err := yaml.Marshal(yamlConfig)
-	if err != nil {
-		return err
-	}
-
-	err = ioutil.WriteFile(path, d, 0600)
-	if err != nil {
-		return err
-	}
+	h.DynamicKubeClient = dynamicClient
 
 	return nil
 }
