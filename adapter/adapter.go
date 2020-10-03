@@ -17,6 +17,8 @@ package adapter
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
+
 	"k8s.io/client-go/dynamic"
 
 	"k8s.io/client-go/kubernetes"
@@ -28,14 +30,14 @@ import (
 type Handler interface {
 	GetName() string
 	CreateInstance([]byte, string, *chan interface{}) error
-	ApplyOperation(context.Context, string, string, bool) error
+	ApplyOperation(context.Context, OperationRequest) error
 	ListOperations() (Operations, error)
 
 	StreamErr(*Event, error)
 	StreamInfo(*Event)
 }
 
-type BaseAdapter struct {
+type BaseHandler struct {
 	Config  config.Handler
 	Log     logger.Handler
 	Channel *chan interface{}
@@ -46,7 +48,16 @@ type BaseAdapter struct {
 	SmiChart          string
 }
 
-func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *chan interface{}) error {
+type OperationRequest struct {
+	OperationName     string
+	Namespace         string
+	Username          string
+	CustomBody        string
+	IsDeleteOperation bool
+	OperationID       string
+}
+
+func (h *BaseHandler) CreateInstance(kubeconfig []byte, contextName string, ch *chan interface{}) error {
 	h.Channel = ch
 	h.KubeConfigPath = h.Config.GetKey("kube-config-path")
 
@@ -68,5 +79,16 @@ func (h *BaseAdapter) CreateInstance(kubeconfig []byte, contextName string, ch *
 	}
 	h.DynamicKubeClient = dynamicClient
 
+	return nil
+}
+
+// creates the namespace unless it is 'default', or it is a delete operation
+func (h *BaseHandler) CreateNamespace(isDeleteOp bool, namespace string) error {
+	if !isDeleteOp && namespace != "default" {
+		if err := h.createNamespace(context.TODO(), namespace); err != nil {
+			logrus.Error(err)
+			return err
+		}
+	}
 	return nil
 }

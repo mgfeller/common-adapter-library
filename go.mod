@@ -20,6 +20,7 @@ require (
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	google.golang.org/grpc v1.31.0
 	gopkg.in/yaml.v2 v2.3.0 // indirect
+	k8s.io/api v0.18.8
 	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v0.18.8
 )

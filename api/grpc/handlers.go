@@ -50,7 +50,15 @@ func (s *Service) ApplyOperation(ctx context.Context, req *meshes.ApplyRuleReque
 		}, ErrRequestInvalid
 	}
 
-	err := s.Handler.ApplyOperation(ctx, req.OpName, req.OperationId, req.DeleteOp)
+	operation := adapter.OperationRequest{
+		OperationName:     req.OpName,
+		Namespace:         req.Namespace,
+		Username:          req.Username,
+		CustomBody:        req.CustomBody,
+		IsDeleteOperation: req.DeleteOp,
+		OperationID:       req.OperationId,
+	}
+	err := s.Handler.ApplyOperation(ctx, operation)
 	if err != nil {
 		return &meshes.ApplyRuleResponse{
 			Error:       err.Error(),

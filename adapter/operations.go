@@ -21,7 +21,7 @@ type Operation struct {
 
 type Operations map[string]*Operation
 
-func (h *BaseAdapter) ListOperations() (Operations, error) {
+func (h *BaseHandler) ListOperations() (Operations, error) {
 	operations := make(Operations)
 	err := h.Config.Operations(&operations)
 	if err != nil {

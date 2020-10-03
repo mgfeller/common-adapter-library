@@ -17,17 +17,26 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+
+	//"errors"
 	"io"
 	"io/ioutil"
 	"strings"
 	"text/template"
 	"time"
 
+	gherrors "github.com/pkg/errors"
+
+	v1 "k8s.io/api/core/v1"
+
 	"github.com/ghodss/yaml"
 	"github.com/layer5io/gokit/models"
-	"github.com/pkg/errors"
+
+	//"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,7 +45,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func (h *BaseAdapter) k8sClientConfig(kubeconfig []byte, contextName string) (*rest.Config, error) {
+func (h *BaseHandler) k8sClientConfig(kubeconfig []byte, contextName string) (*rest.Config, error) {
 	if len(kubeconfig) > 0 {
 		ccfg, err := clientcmd.Load(kubeconfig)
 		if err != nil {
@@ -77,7 +86,7 @@ func writeKubeconfig(kubeconfig []byte, contextName string, path string) error {
 	return nil
 }
 
-func (h *BaseAdapter) executeRule(ctx context.Context, data *unstructured.Unstructured, namespace string, delete, isCustomOp bool) error {
+func (h *BaseHandler) executeRule(ctx context.Context, data *unstructured.Unstructured, namespace string, delete, isCustomOp bool) error {
 	if namespace != "" {
 		data.SetNamespace(namespace)
 	}
@@ -128,14 +137,14 @@ func (h *BaseAdapter) executeRule(ctx context.Context, data *unstructured.Unstru
 	return nil
 }
 
-func (h *BaseAdapter) createResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) error {
+func (h *BaseHandler) createResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) error {
 	_, err := h.DynamicKubeClient.Resource(res).Namespace(data.GetNamespace()).Create(ctx, data, metav1.CreateOptions{})
 	if err != nil {
-		err = errors.Wrapf(err, "unable to create the requested resource, attempting operation without namespace")
+		err = gherrors.Wrapf(err, "unable to create the requested resource, attempting operation without namespace")
 		logrus.Warn(err)
 		_, err = h.DynamicKubeClient.Resource(res).Create(ctx, data, metav1.CreateOptions{})
 		if err != nil {
-			err = errors.Wrapf(err, "unable to create the requested resource, attempting to update")
+			err = gherrors.Wrapf(err, "unable to create the requested resource, attempting to update")
 			logrus.Error(err)
 			return err
 		}
@@ -144,7 +153,7 @@ func (h *BaseAdapter) createResource(ctx context.Context, res schema.GroupVersio
 	return nil
 }
 
-func (h *BaseAdapter) deleteResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) error {
+func (h *BaseHandler) deleteResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) error {
 	if h.DynamicKubeClient == nil {
 		return errors.New("mesh client has not been created")
 	}
@@ -170,12 +179,12 @@ func (h *BaseAdapter) deleteResource(ctx context.Context, res schema.GroupVersio
 
 	err := h.DynamicKubeClient.Resource(res).Namespace(data.GetNamespace()).Delete(ctx, data.GetName(), metav1.DeleteOptions{})
 	if err != nil {
-		err = errors.Wrapf(err, "unable to delete the requested resource, attempting operation without namespace")
+		err = gherrors.Wrapf(err, "unable to delete the requested resource, attempting operation without namespace")
 		logrus.Warn(err)
 
 		err := h.DynamicKubeClient.Resource(res).Delete(ctx, data.GetName(), metav1.DeleteOptions{})
 		if err != nil {
-			err = errors.Wrapf(err, "unable to delete the requested resource")
+			err = gherrors.Wrapf(err, "unable to delete the requested resource")
 			logrus.Error(err)
 			return err
 		}
@@ -184,15 +193,15 @@ func (h *BaseAdapter) deleteResource(ctx context.Context, res schema.GroupVersio
 	return nil
 }
 
-func (h *BaseAdapter) getResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (h *BaseHandler) getResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	data1, err := h.DynamicKubeClient.Resource(res).Namespace(data.GetNamespace()).Get(ctx, data.GetName(), metav1.GetOptions{})
 	if err != nil {
-		err = errors.Wrap(err, "unable to retrieve the resource with a matching name, attempting operation without namespace")
+		err = gherrors.Wrap(err, "unable to retrieve the resource with a matching name, attempting operation without namespace")
 		logrus.Warn(err)
 
 		data1, err = h.DynamicKubeClient.Resource(res).Get(ctx, data.GetName(), metav1.GetOptions{})
 		if err != nil {
-			err = errors.Wrap(err, "unable to retrieve the resource with a matching name, while attempting to apply the config")
+			err = gherrors.Wrap(err, "unable to retrieve the resource with a matching name, while attempting to apply the config")
 			logrus.Error(err)
 			return nil, err
 		}
@@ -201,13 +210,13 @@ func (h *BaseAdapter) getResource(ctx context.Context, res schema.GroupVersionRe
 	return data1, nil
 }
 
-func (h *BaseAdapter) updateResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) error {
+func (h *BaseHandler) updateResource(ctx context.Context, res schema.GroupVersionResource, data *unstructured.Unstructured) error {
 	if _, err := h.DynamicKubeClient.Resource(res).Namespace(data.GetNamespace()).Update(ctx, data, metav1.UpdateOptions{}); err != nil {
-		err = errors.Wrap(err, "unable to update resource with the given name, attempting operation without namespace")
+		err = gherrors.Wrap(err, "unable to update resource with the given name, attempting operation without namespace")
 		logrus.Warn(err)
 
 		if _, err = h.DynamicKubeClient.Resource(res).Update(ctx, data, metav1.UpdateOptions{}); err != nil {
-			err = errors.Wrap(err, "unable to update resource with the given name, while attempting to apply the config")
+			err = gherrors.Wrap(err, "unable to update resource with the given name, while attempting to apply the config")
 			logrus.Error(err)
 			return err
 		}
@@ -216,10 +225,10 @@ func (h *BaseAdapter) updateResource(ctx context.Context, res schema.GroupVersio
 	return nil
 }
 
-func (h *BaseAdapter) applyConfigChange(ctx context.Context, yamlFileContents, namespace string, delete, isCustomOp bool) error {
+func (h *BaseHandler) applyConfigChange(ctx context.Context, yamlFileContents, namespace string, delete, isCustomOp bool) error {
 	yamls, err := h.splitYAML(yamlFileContents)
 	if err != nil {
-		err = errors.Wrap(err, "error while splitting yaml")
+		err = gherrors.Wrap(err, "error while splitting yaml")
 		logrus.Error(err)
 		return err
 	}
@@ -246,14 +255,14 @@ func (h *BaseAdapter) applyConfigChange(ctx context.Context, yamlFileContents, n
 	return nil
 }
 
-func (h *BaseAdapter) applyRulePayload(ctx context.Context, namespace string, newBytes []byte, delete, isCustomOp bool) error {
+func (h *BaseHandler) applyRulePayload(ctx context.Context, namespace string, newBytes []byte, delete, isCustomOp bool) error {
 	if h.DynamicKubeClient == nil {
 		return errors.New("mesh client has not been created")
 	}
 	// logrus.Debugf("received yaml bytes: %s", newBytes)
 	jsonBytes, err := yaml.YAMLToJSON(newBytes)
 	if err != nil {
-		err = errors.Wrapf(err, "unable to convert yaml to json")
+		err = gherrors.Wrapf(err, "unable to convert yaml to json")
 		logrus.Error(err)
 		return err
 	}
@@ -262,7 +271,7 @@ func (h *BaseAdapter) applyRulePayload(ctx context.Context, namespace string, ne
 		data := &unstructured.Unstructured{}
 		err = data.UnmarshalJSON(jsonBytes)
 		if err != nil {
-			err = errors.Wrapf(err, "unable to unmarshal json created from yaml")
+			err = gherrors.Wrapf(err, "unable to unmarshal json created from yaml")
 			logrus.Error(err)
 			return err
 		}
@@ -278,7 +287,7 @@ func (h *BaseAdapter) applyRulePayload(ctx context.Context, namespace string, ne
 	return nil
 }
 
-func (h *BaseAdapter) splitYAML(yamlContents string) ([]string, error) {
+func (h *BaseHandler) splitYAML(yamlContents string) ([]string, error) {
 	yamlDecoder, ok := NewDocumentDecoder(ioutil.NopCloser(bytes.NewReader([]byte(yamlContents)))).(*YAMLDecoder)
 	if !ok {
 		err := fmt.Errorf("unable to create a yaml decoder")
@@ -320,23 +329,25 @@ func (h *BaseAdapter) splitYAML(yamlContents string) ([]string, error) {
 	return result, nil
 }
 
-func (h *BaseAdapter) createNamespace(ctx context.Context, namespace string) error {
+// create the namespace if it doesn't exist
+func (h *BaseHandler) createNamespace(ctx context.Context, namespace string) error {
 	logrus.Debugf("creating namespace: %s", namespace)
-	// TODO: copy namespace.yaml to an appropriate location in this library.
-	yamlFileContents, err := h.executeTemplate(ctx, "", namespace, "namespace.yml")
-	if err != nil {
-		return err
+	_, errGetNs := h.KubeClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	var statusErr *apierrors.StatusError
+	if errors.As(errGetNs, &statusErr) {
+		if statusErr.ErrStatus.Code == 404 {
+			nsSpec := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			_, err := h.KubeClient.CoreV1().Namespaces().Create(ctx, nsSpec, metav1.CreateOptions{})
+			return err
+		}
 	}
-	if err := h.applyConfigChange(ctx, yamlFileContents, namespace, false, false); err != nil {
-		return err
-	}
-	return nil
+	return errGetNs
 }
 
-func (h *BaseAdapter) executeTemplate(ctx context.Context, username, namespace, templatePath string) (string, error) {
+func (h *BaseHandler) executeTemplate(ctx context.Context, username, namespace, templatePath string) (string, error) {
 	tmpl, err := template.ParseFiles(templatePath)
 	if err != nil {
-		err = errors.Wrapf(err, "unable to parse template")
+		err = gherrors.Wrapf(err, "unable to parse template")
 		logrus.Error(err)
 		return "", err
 	}
@@ -346,7 +357,7 @@ func (h *BaseAdapter) executeTemplate(ctx context.Context, username, namespace, 
 		"namespace": namespace,
 	})
 	if err != nil {
-		err = errors.Wrapf(err, "unable to execute template")
+		err = gherrors.Wrapf(err, "unable to execute template")
 		logrus.Error(err)
 		return "", err
 	}

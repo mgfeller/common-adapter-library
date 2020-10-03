@@ -20,7 +20,7 @@ type Spec struct {
 	Version string `json:"version"`
 }
 
-func (h *BaseAdapter) GetName() string {
+func (h *BaseHandler) GetName() string {
 	spec := &Spec{}
 	err := h.Config.MeshSpec(&spec)
 	if err != nil {
