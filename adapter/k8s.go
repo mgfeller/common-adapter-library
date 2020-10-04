@@ -327,13 +327,10 @@ func (h *BaseHandler) splitYAML(yamlContents string) ([]string, error) {
 func (h *BaseHandler) createNamespace(ctx context.Context, namespace string) error {
 	logrus.Debugf("creating namespace: %s", namespace)
 	_, errGetNs := h.KubeClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	var statusErr *apierrors.StatusError
-	if errors.As(errGetNs, &statusErr) {
-		if statusErr.ErrStatus.Code == 404 {
-			nsSpec := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-			_, err := h.KubeClient.CoreV1().Namespaces().Create(ctx, nsSpec, metav1.CreateOptions{})
-			return err
-		}
+	if apierrors.IsNotFound(errGetNs) {
+		nsSpec := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+		_, err := h.KubeClient.CoreV1().Namespaces().Create(ctx, nsSpec, metav1.CreateOptions{})
+		return err
 	}
 	return errGetNs
 }
