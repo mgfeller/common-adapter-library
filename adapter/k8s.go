@@ -20,7 +20,8 @@ import (
 	"errors"
 	"fmt"
 
-	//"errors"
+	"github.com/mgfeller/common-adapter-library/meshes"
+
 	"io"
 	"io/ioutil"
 	"strings"
@@ -34,7 +35,6 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/layer5io/gokit/models"
 
-	//"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,7 +86,7 @@ func writeKubeconfig(kubeconfig []byte, contextName string, path string) error {
 	return nil
 }
 
-func (h *BaseHandler) executeRule(ctx context.Context, data *unstructured.Unstructured, namespace string, delete, isCustomOp bool) error {
+func (h *BaseHandler) executeRule(ctx context.Context, data *unstructured.Unstructured, namespace string, isDelete, isCustomOp bool) error {
 	if namespace != "" {
 		data.SetNamespace(namespace)
 	}
@@ -117,7 +117,7 @@ func (h *BaseHandler) executeRule(ctx context.Context, data *unstructured.Unstru
 	}
 	logrus.Debugf("Computed Resource: %+#v", res)
 
-	if delete {
+	if isDelete {
 		return h.deleteResource(ctx, res, data)
 	}
 
@@ -225,7 +225,7 @@ func (h *BaseHandler) updateResource(ctx context.Context, res schema.GroupVersio
 	return nil
 }
 
-func (h *BaseHandler) applyConfigChange(ctx context.Context, yamlFileContents, namespace string, delete, isCustomOp bool) error {
+func (h *BaseHandler) applyConfigChange(ctx context.Context, yamlFileContents, namespace string, isDelete, isCustomOp bool) error {
 	yamls, err := h.splitYAML(yamlFileContents)
 	if err != nil {
 		err = gherrors.Wrap(err, "error while splitting yaml")
@@ -234,12 +234,11 @@ func (h *BaseHandler) applyConfigChange(ctx context.Context, yamlFileContents, n
 	}
 	for _, yml := range yamls {
 		if strings.TrimSpace(yml) != "" {
-			if err := h.applyRulePayload(ctx, namespace, []byte(yml), delete, isCustomOp); err != nil {
+			if err := h.applyRulePayload(ctx, namespace, []byte(yml), isDelete, isCustomOp); err != nil {
 				errStr := strings.TrimSpace(err.Error())
-				if delete {
+				if isDelete {
 					if strings.HasSuffix(errStr, "not found") ||
 						strings.HasSuffix(errStr, "the server could not find the requested resource") {
-						// logrus.Debugf("skipping error. . .")
 						continue
 					}
 				} else {
@@ -247,7 +246,6 @@ func (h *BaseHandler) applyConfigChange(ctx context.Context, yamlFileContents, n
 						continue
 					}
 				}
-				// logrus.Debugf("returning error: %v", err)
 				return err
 			}
 		}
@@ -255,18 +253,16 @@ func (h *BaseHandler) applyConfigChange(ctx context.Context, yamlFileContents, n
 	return nil
 }
 
-func (h *BaseHandler) applyRulePayload(ctx context.Context, namespace string, newBytes []byte, delete, isCustomOp bool) error {
+func (h *BaseHandler) applyRulePayload(ctx context.Context, namespace string, newBytes []byte, isDelete, isCustomOp bool) error {
 	if h.DynamicKubeClient == nil {
 		return errors.New("mesh client has not been created")
 	}
-	// logrus.Debugf("received yaml bytes: %s", newBytes)
 	jsonBytes, err := yaml.YAMLToJSON(newBytes)
 	if err != nil {
 		err = gherrors.Wrapf(err, "unable to convert yaml to json")
 		logrus.Error(err)
 		return err
 	}
-	// logrus.Debugf("created json: %s, length: %d", jsonBytes, len(jsonBytes))
 	if len(jsonBytes) > 5 { // attempting to skip 'null' json
 		data := &unstructured.Unstructured{}
 		err = data.UnmarshalJSON(jsonBytes)
@@ -278,11 +274,11 @@ func (h *BaseHandler) applyRulePayload(ctx context.Context, namespace string, ne
 		if data.IsList() {
 			err = data.EachListItem(func(r runtime.Object) error {
 				dataL, _ := r.(*unstructured.Unstructured)
-				return h.executeRule(ctx, dataL, namespace, delete, isCustomOp)
+				return h.executeRule(ctx, dataL, namespace, isDelete, isCustomOp)
 			})
 			return err
 		}
-		return h.executeRule(ctx, data, namespace, delete, isCustomOp)
+		return h.executeRule(ctx, data, namespace, isDelete, isCustomOp)
 	}
 	return nil
 }
@@ -304,10 +300,8 @@ func (h *BaseHandler) splitYAML(yamlContents string) ([]string, error) {
 	data := [][]byte{}
 	ind := 0
 	for err == io.ErrShortBuffer || err == nil {
-		// for {
 		d := make([]byte, 1000)
 		n, err = yamlDecoder.Read(d)
-		// logrus.Debugf("Read this: %s, count: %d, err: %v", d, n, err)
 		if len(data) == 0 || len(data) <= ind {
 			data = append(data, []byte{})
 		}
@@ -329,7 +323,7 @@ func (h *BaseHandler) splitYAML(yamlContents string) ([]string, error) {
 	return result, nil
 }
 
-// create the namespace if it doesn't exist
+// creates the namespace if it doesn't exist
 func (h *BaseHandler) createNamespace(ctx context.Context, namespace string) error {
 	logrus.Debugf("creating namespace: %s", namespace)
 	_, errGetNs := h.KubeClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
@@ -344,7 +338,7 @@ func (h *BaseHandler) createNamespace(ctx context.Context, namespace string) err
 	return errGetNs
 }
 
-func (h *BaseHandler) executeTemplate(ctx context.Context, username, namespace, templatePath string) (string, error) {
+func (h *BaseHandler) executeTemplate(ctx context.Context, data map[string]string, templatePath string) (string, error) {
 	tmpl, err := template.ParseFiles(templatePath)
 	if err != nil {
 		err = gherrors.Wrapf(err, "unable to parse template")
@@ -352,14 +346,30 @@ func (h *BaseHandler) executeTemplate(ctx context.Context, username, namespace, 
 		return "", err
 	}
 	buf := bytes.NewBufferString("")
-	err = tmpl.Execute(buf, map[string]string{
-		"user_name": username,
-		"namespace": namespace,
-	})
+	err = tmpl.Execute(buf, data)
 	if err != nil {
 		err = gherrors.Wrapf(err, "unable to execute template")
 		logrus.Error(err)
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func (h *BaseHandler) applyK8sManifest(ctx context.Context, request OperationRequest, operation Operation, data map[string]string, templatePath string) error {
+	merged, err := h.executeTemplate(ctx, data, templatePath)
+	if err != nil {
+		err = gherrors.Wrapf(err, "unable to apply kubernetes manifest (executeTemplate) ")
+		logrus.Error(err)
+		return err
+	}
+
+	isCustomOperation := operation.Type == int32(meshes.OpCategory_CUSTOM)
+
+	if err := h.applyConfigChange(ctx, merged, request.Namespace, request.IsDeleteOperation, isCustomOperation); err != nil {
+		err = gherrors.Wrapf(err, "unable to apply kubernetes manifest (applyConfigChange)")
+		logrus.Error(err)
+		return err
+	}
+
+	return nil
 }

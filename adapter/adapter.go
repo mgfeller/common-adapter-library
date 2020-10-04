@@ -83,12 +83,20 @@ func (h *BaseHandler) CreateInstance(kubeconfig []byte, contextName string, ch *
 }
 
 // creates the namespace unless it is 'default', or it is a delete operation
-func (h *BaseHandler) CreateNamespace(isDeleteOp bool, namespace string) error {
-	if !isDeleteOp && namespace != "default" {
+func (h *BaseHandler) CreateNamespace(isDelete bool, namespace string) error {
+	if !isDelete && namespace != "default" {
 		if err := h.createNamespace(context.TODO(), namespace); err != nil {
 			logrus.Error(err)
 			return err
 		}
+	}
+	return nil
+}
+
+func (h *BaseHandler) ApplyKubernetesManifest(request OperationRequest, operation Operation, mergeData map[string]string, templatePath string) error {
+	if err := h.applyK8sManifest(context.TODO(), request, operation, mergeData, templatePath); err != nil {
+		logrus.Error(err)
+		return err
 	}
 	return nil
 }
